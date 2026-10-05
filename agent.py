@@ -13,6 +13,8 @@ Build and test your three tools in `tools.py` first. Then come here.
     python agent.py          runs both example paths below
 """
 
+import re
+
 import config
 import trace
 from tools import search_listings, suggest_outfit, create_fit_card
@@ -48,6 +50,44 @@ def new_session(query: str, wardrobe: dict) -> dict:
 
 
 # ── planning loop ─────────────────────────────────────────────────────────────
+
+_PRICE_RE = re.compile(r"\$(\d+(?:\.\d+)?)")
+_SIZE_RE = re.compile(r"\bsize\s+([A-Za-z0-9/]+)", re.IGNORECASE)
+_FILLER_RE = re.compile(
+    r"\b(looking for|i want|i'm looking for|under|size|a|an|the)\b",
+    re.IGNORECASE,
+)
+
+
+def parse_query(query: str) -> dict:
+    """
+    Pull a description, size, and max_price out of a free-text query.
+
+    Regex over asking the model: this doesn't need judgment, it needs
+    reliability, and a plain pattern match costs no API call and behaves the
+    same way every time — which matters, since criteria 3 and 5 both assume
+    this path is deterministic.
+    """
+    max_price = None
+    price_match = _PRICE_RE.search(query)
+    if price_match:
+        max_price = float(price_match.group(1))
+
+    size = None
+    size_match = _SIZE_RE.search(query)
+    if size_match:
+        size = size_match.group(1)
+
+    description = query
+    if price_match:
+        description = description.replace(price_match.group(0), " ")
+    if size_match:
+        description = description.replace(size_match.group(0), " ")
+    description = _FILLER_RE.sub(" ", description)
+    description = re.sub(r"\s+", " ", description).strip()
+
+    return {"description": description, "size": size, "max_price": max_price}
+
 
 def run_agent(query: str, wardrobe: dict) -> dict:
     """
@@ -106,9 +146,36 @@ def run_agent(query: str, wardrobe: dict) -> dict:
         than a stack trace. The import is already at the top of this file.
     """
     session = new_session(query, wardrobe)
+    count = 0
 
-    # TODO: delete these two lines and build the loop.
-    session["error"] = "The planning loop isn't built yet — see the TODO in agent.py."
+    count += 1
+    trace.check_iterations(count)
+    session["parsed"] = parse_query(query)
+
+    results = search_listings(
+        description=session["parsed"]["description"],
+        size=session["parsed"]["size"],
+        max_price=session["parsed"]["max_price"],
+    )
+    session["search_results"] = results
+
+    if not results:
+        session["error"] = (
+            "No listings matched. Try a higher price limit, a different "
+            "size, or more general keywords."
+        )
+        return session
+
+    session["selected_item"] = results[0]
+
+    count += 1
+    trace.check_iterations(count)
+    session["outfit_suggestion"] = suggest_outfit(session["selected_item"], wardrobe)
+
+    count += 1
+    trace.check_iterations(count)
+    session["fit_card"] = create_fit_card(session["outfit_suggestion"], session["selected_item"])
+
     return session
 
 
