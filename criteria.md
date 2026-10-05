@@ -25,9 +25,10 @@ Given a query that matches at least one listing, the agent completes all three
 tool calls and returns a fit card — in at least 4 of 5 tries.
 
 **Why this target:**
-<!-- Why 4 of 5 and not 5 of 5? Something about your search, probably —
-     "my search is a plain keyword match and some phrasings will miss" is a
-     real answer. -->
+
+My search is a plain keyword/substring match, not a model call, so some
+phrasings of a query will miss a listing that a human would still consider a
+match. 4 of 5 allows for that without excusing a pattern of misses.
 
 ---
 
@@ -37,66 +38,54 @@ Given a query that matches no listings, the agent stops before calling
 `suggest_outfit` and returns a message naming what to change — 5 of 5 tries.
 
 **Why this target:**
-<!-- Why is 5 of 5 reasonable here when criterion 1 isn't? What's different
-     about this path? -->
+
+This path never reaches the model — `suggest_outfit` and `create_fit_card`
+are never called when the search comes back empty. The check is a plain `if`
+statement (is the list empty?) that runs the same way every time, so there's
+no randomness to account for, unlike criterion 1.
 
 ---
 
 ## 3. Something about state
 
-<!-- YOU WRITE THIS ONE.
-
-     How would you know that the item your search found is the same item the
-     next tool received? Name something countable or observable.
-
-     This is the criterion people find hardest, because state failure doesn't
-     look like state failure — it looks like a tool problem. Something that
-     compares session["selected_item"] against what actually reached
-     suggest_outfit is the shape you're after. -->
-
-
+In 5 of 5 tries, the `id` of the item stored in `session["selected_item"]`
+matches the `id` of the `new_item` that `suggest_outfit` actually receives.
 
 **Why this target:**
 
-
+This is my own code passing a value through the session, not a model call, so
+there's no randomness to account for. If the logic is correct, it should hold
+every single time — a miss here would mean a real bug, not an unlucky run.
 
 ---
 
 ## 4. Something about the fit card
 
-<!-- YOU WRITE THIS ONE.
-
-     The fit card calls a model, so the same input can produce different words
-     each time. That's not a bug — it's the nature of the tool. So what would
-     make it acceptable?
-
-     Think about what you'd actually be unhappy to see. A caption that never
-     mentions the price? Two different items producing the same opening
-     sentence? A card longer than a caption anyone would post? Any of those can
-     be turned into a number. -->
-
-
+In at least 4 of 5 tries, the fit card mentions the item (a word from its
+title or description) and states its price.
 
 **Why this target:**
 
-
+This one calls a model, so unlike criterion 3, there's real variation — the
+model might occasionally phrase something in a way that drops the price or
+gets vague about what the item is. 4 of 5 allows one off run without excusing
+a pattern.
 
 ---
 
 ## 5. Your choice
 
-<!-- YOU WRITE THIS ONE TOO.
-
-     Pick something you actually care about getting right. Speed, the empty
-     wardrobe path, what happens when the model can't be reached, whether the
-     search respects a price ceiling — anything, as long as it names a number
-     or an observable outcome. -->
-
-
+In 5 of 5 tries, a query for an item type absent from the data (e.g. "a
+spaceship suit") is handled the same way as any other empty search —
+`search_listings` returns an empty list, and the agent stops with the same
+message, rather than crashing or behaving differently.
 
 **Why this target:**
 
-
+Matching a query against the listings data is deterministic code, not a model
+call, so there's no reason this should vary. A miss here would mean the
+empty-case handling only works for some kinds of "no results," not all of
+them — a real bug.
 
 ---
 
