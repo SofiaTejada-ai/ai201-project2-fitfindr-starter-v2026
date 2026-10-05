@@ -47,53 +47,38 @@
 
 ## Tool Inventory
 
-<!-- Four lines per tool. This is worth 2 points and it's the single most
-     common place students lose them.
-
-     "Returns a list" earns NOTHING. The description has to say what is IN
-     the list.
-
-     The empty case isn't optional either — it's the thing your loop branches
-     on, and if you don't decide it here you'll discover it as a crash in
-     Milestone 5. -->
-
-### `search_listings`
-
-- **What it does:**
-- **Inputs:** <!-- name and type each: `max_price` (float), not "a price" -->
-- **Returns:**
-- **When it has nothing:**
-
-### `suggest_outfit`
-
-- **What it does:**
+### `search_listings(description, size, max_price)`
+- **What it does:** Searches the listings data for items matching a text description, a size, and a maximum price.
 - **Inputs:**
-- **Returns:**
-- **When it has nothing:**
+  - `description` (str) — free text describing what the user wants, e.g. "vintage graphic tee"
+  - `size` (str, optional) — matched against a listing's `size` field as a case-insensitive substring, not an exact match, since the data's size formats are inconsistent (`"W30 L30"`, `"S/M"`, `"XL (oversized)"`) — a request for `"M"` matches a listing sized `"S/M"`
+  - `max_price` (float, optional) — the highest price to allow
+- **Returns:** a list of dicts, each the full listing record (`id`, `title`, `description`, `category`, `style_tags`, `size`, `condition`, `price`, `colors`, `brand`, `platform`) — the command line only prints title/price/description/size to the person, but the full dict is what's passed internally
+- **Empty case:** an empty list `[]` — never `None`, never a crash
 
-### `create_fit_card`
-
-- **What it does:**
+### `suggest_outfit(new_item, wardrobe)`
+- **What it does:** Takes the new item and the user's wardrobe, and returns outfit ideas combining the new item with pieces already owned.
 - **Inputs:**
-- **Returns:**
-- **When it has nothing:**
+  - `new_item` (dict) — the listing dict for the item just found
+  - `wardrobe` (dict) — shaped `{"items": [...]}`, each item shaped like a wardrobe entry (`id`, `name`, `category`, `colors`, `style_tags`, `notes`)
+- **Returns:** a list of plain-text outfit-suggestion strings, each describing one way to style the new item with existing wardrobe pieces
+- **Empty case:** when `wardrobe["items"]` is empty, returns a list with one general-advice string based on the item's own category/colors/style_tags (e.g. "This graphic tee would pair well with dark jeans and sneakers for a casual look.") — not an apology, not an empty list
+
+### `create_fit_card(outfit, new_item)`
+- **What it does:** Writes a short, postable caption for the new item styled with the suggested outfit.
+- **Inputs:**
+  - `outfit` (list of str) — the suggestion(s) from `suggest_outfit`
+  - `new_item` (dict) — the listing dict for the new item
+- **Returns:** a single string — the caption text
+- **Empty case:** if `outfit` is empty, raises a clear error (`ValueError("create_fit_card got an empty outfit — this should never happen if the pipeline is working correctly.")`) rather than failing silently or crashing with a cryptic stack trace — this state should never occur if the branch rule and `suggest_outfit`'s fallback are both working
 
 ---
 
 ## Planning Loop
 
-<!-- Your branch rule, stated as a rule — the condition AND both paths — plus
-     the file and function that holds it.
-
-     Like this:
-       "If search_listings returns an empty list, put a message in the session
-        and stop. Otherwise take the first result and go to suggest_outfit."
-        — agent.py::run_agent
-
-     The grader checks your code against what you claim here, so the file and
-     function have to be real. -->
-
 **Branch rule:**
+
+If `search_listings` returns an empty list, the loop puts a message in the session naming what to change (price or size) and stops — it does not call `suggest_outfit`. Otherwise, it takes the first result and continues to `suggest_outfit`.
 
 **Where it lives:** `agent.py::run_agent`
 
@@ -111,28 +96,16 @@
      2. Your three per-tool terminal tests — the command and what it printed. -->
 
 **One full query**
-
-```
 $ python app.py ask '...'
 
-```
 
 **The three tools, tested one at a time**
-
-```
 $ python -c "from tools import search_listings; print(search_listings('graphic tee', max_price=30))"
 
-```
-
-```
 $ python -c "from tools import suggest_outfit; ..."
 
-```
-
-```
 $ python -c "from tools import create_fit_card; ..."
 
-```
 
 ---
 
@@ -186,10 +159,6 @@ $ python -c "from tools import create_fit_card; ..."
 **Real output from one try**, pasted as text, naming the file and function
 that produced it:
 
-```
-
-```
-
 ---
 
 ## Verdicts and Diagnoses
@@ -238,15 +207,7 @@ that produced it:
 
 **Happy path**
 
-```
-
-```
-
 **Empty search**
-
-```
-
-```
 
 **On the MCP move:** <!-- what changed in your code, and whether anything
 behaved differently afterwards. If the rewire didn't work, say exactly where it
