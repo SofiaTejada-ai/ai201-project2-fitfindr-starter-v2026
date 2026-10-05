@@ -20,12 +20,42 @@ That last line is what your loop branches on. "Returns a list" earns nothing —
 the description has to say what is *in* the list.
 """
 
+import re 
 import config  # noqa: F401 — you'll use this in search_listings
 from generate import generate
 from utils.data_loader import load_listings
 
-
 # ── Tool 1: search_listings ───────────────────────────────────────────────────
+
+def _tokenize(text: str) -> set[str]:
+    """
+    Lowercase alphanumeric tokens, split on anything else.
+
+    This is what makes size matching safe. A plain substring check would
+    match "s" inside "us 9", or "l" inside "xl" — exactly the trap the stub's
+    docstring warns about. Splitting into whole tokens first means a query
+    for "m" only matches a token that IS "m", not one that merely contains it.
+    """
+    return set(re.findall(r"[a-z0-9]+", text.lower()))
+
+
+_STOPWORDS = {
+    "a", "an", "the", "in", "on", "at", "with", "for", "of", "and",
+    "or", "to", "from", "is", "this", "that", "it", "its",
+}
+
+
+def _content_words(text: str) -> set[str]:
+    """
+    Tokenize text for keyword-overlap scoring, dropping common stopwords.
+
+    Without this, a query like "a spaceship suit" scores a nonzero overlap
+    against almost every listing just because both contain the word "a" —
+    a stopword match, not a real one. Size matching still uses the raw
+    _tokenize(), since sizes aren't English words and don't need this.
+    """
+    return _tokenize(text) - _STOPWORDS
+
 
 def search_listings(
     description: str,
@@ -79,7 +109,33 @@ def search_listings(
         python -c "from tools import search_listings; print(search_listings('graphic tee', max_price=30))"
     """
     # TODO: replace this with your implementation
-    return []
+    listings = load_listings()
+
+    query_size_tokens = _tokenize(size) if size else None
+    query_words = _content_words(description)
+
+    scored: list[tuple[int, dict]] = []
+    for listing in listings:
+        if max_price is not None and listing["price"] > max_price:
+            continue
+
+        if query_size_tokens is not None:
+            listing_size_tokens = _tokenize(listing["size"])
+            if not query_size_tokens & listing_size_tokens:
+                continue
+
+        searchable = " ".join(
+            [listing["title"], listing["description"], *listing["style_tags"]]
+        )
+        score = len(query_words & _content_words(searchable))
+
+        if score == 0:
+            continue
+
+        scored.append((score, listing))
+
+    scored.sort(key=lambda pair: pair[0], reverse=True)
+    return [listing for _, listing in scored[: config.SEARCH_RESULT_LIMIT]]
 
 
 # ── Tool 2: suggest_outfit ────────────────────────────────────────────────────
