@@ -168,8 +168,43 @@ def suggest_outfit(new_item: dict, wardrobe: dict) -> str:
     Test it from a terminal before you move on:
         python -c "from tools import suggest_outfit; from utils.data_loader import get_example_wardrobe, load_listings; print(suggest_outfit(load_listings()[0], get_example_wardrobe()))"
     """
-    # TODO: replace this with your implementation
-    return ""
+    items = wardrobe.get("items", [])
+
+    item_description = (
+        f"{new_item['title']} ({', '.join(new_item['colors'])}), "
+        f"category: {new_item['category']}, style: {', '.join(new_item['style_tags'])}"
+    )
+
+    system = (
+        "You are a thrift fashion stylist. Given a thrifted item someone is "
+        "considering, suggest one or two complete outfits. Be specific and "
+        "concrete — name colors, categories, and vibe. Keep it to two or "
+        "three sentences."
+    )
+
+    if not items:
+        prompt = (
+            f"The user is considering this item:\n{item_description}\n\n"
+            f"They have no wardrobe entered yet, so give general styling "
+            f"advice for this item on its own — what kinds of pieces would "
+            f"pair well with it by category, color, or style — without "
+            f"referencing specific items they own."
+        )
+    else:
+        wardrobe_lines = "\n".join(
+            f"- {w['name']} (category: {w['category']}, "
+            f"colors: {', '.join(w['colors'])}, "
+            f"style: {', '.join(w['style_tags'])})"
+            for w in items
+        )
+        prompt = (
+            f"The user is considering this item:\n{item_description}\n\n"
+            f"Their current wardrobe:\n{wardrobe_lines}\n\n"
+            f"Suggest one or two outfits combining the new item with "
+            f"specific pieces from their wardrobe, naming the pieces by name."
+        )
+
+    return generate(prompt, system=system)
 
 
 # ── Tool 3: create_fit_card ───────────────────────────────────────────────────
