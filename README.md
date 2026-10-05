@@ -41,7 +41,7 @@
 
 <!-- Three or four sentences: what a user asks for, and what they get back. -->
 
-
+FitFindr is an agent that finds thrifted clothing and styles it for you. A user describes what they want in plain language — e.g. "vintage graphic tee under $30" — and the agent searches the listings, picks the closest keyword match, suggests an outfit combining it with the user's existing wardrobe (or general styling advice if they have none entered), and writes a short caption ready to post. If nothing matches the search, it stops and says what to change instead of guessing.
 
 ---
 
@@ -82,9 +82,9 @@ If `search_listings` returns an empty list, the loop puts a message in the sessi
 
 **Where it lives:** `agent.py::run_agent`
 
-**How the query is parsed:** <!-- regex, string splitting, or asking the model — say which -->
+**How the query is parsed:** Regex, not the model — `agent.py::parse_query` pulls out a price with `\$(\d+(?:\.\d+)?)`, a size with `\bsize\s+([A-Za-z0-9/]+)`, and treats whatever's left (after stripping filler words like "looking for" and "under") as the description. Chosen over asking the model because parsing doesn't need judgment, it needs reliability, and a regex costs no API call and behaves identically every time. Known limit: a price only counts if it has a `$` — "under 30" is left in the description and no price filter is applied.
 
-**What moves through the session:** <!-- which fields, in what order -->
+**What moves through the session:** `query` and `wardrobe` (set at the start), then `parsed` (the description/size/max_price dict), `search_results` (every match from `search_listings`), `selected_item` (the first result, the one that flows into `suggest_outfit` and `create_fit_card`), `outfit_suggestion`, `fit_card`, and `error` (set only when the loop stops early).
 
 ---
 
@@ -130,15 +130,15 @@ Found these vintage Levi's 501 jeans on depop for just $38.00 and they honestly 
 
 **Moment 1**
 
-- *What I asked for:*
-- *What came back:*
-- *What I changed:*
+- *What I asked for:* I tested `search_listings('a spaceship suit')`, expecting `[]` since nothing like it is in the data, and asked Claude why it returned 10 unrelated listings instead.
+- *What came back:* The query tokenized to `{"a", "spaceship", "suit"}`, and "a" appears in almost every listing description — so every listing scored 1 and passed the `score == 0` check on a stopword match alone.
+- *What I changed:* I added a small stopword set and a `_content_words()` helper used only for keyword scoring; size matching still uses the raw whole-token `_tokenize()`. The spaceship query now returns `[]`, and "vintage graphic tee" still returns tees first.
 
 **Moment 2**
 
-- *What I asked for:*
-- *What came back:*
-- *What I changed:*
+- *What I asked for:* A spec for `suggest_outfit` and `create_fit_card`, assuming they'd return lists of strings.
+- *What came back:* When I pasted the actual stub file, both were already typed to return a single `str`.
+- *What I changed:* I kept the stub's types instead of my original plan, since changing a given function signature wasn't worth it.
 
 <!-- ═══════════════════════ UNIT 4 — THE TEST ═══════════════════════
 
