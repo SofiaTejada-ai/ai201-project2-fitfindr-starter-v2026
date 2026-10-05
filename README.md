@@ -100,11 +100,21 @@ $ python app.py ask '...'
 
 
 **The three tools, tested one at a time**
+
+```text
 $ python -c "from tools import search_listings; print(search_listings('graphic tee', max_price=30))"
+[{'id': 'lst_002', 'title': 'Y2K Baby Tee — Butterfly Print', 'price': 18.0, ...}, {'id': 'lst_006', 'title': 'Graphic Tee — 2003 Tour Bootleg Style', 'price': 24.0, ...}, ...]
+```
 
-$ python -c "from tools import suggest_outfit; ..."
+```text
+$ python -c "from tools import suggest_outfit; from utils.data_loader import get_example_wardrobe, load_listings; print(suggest_outfit(load_listings()[0], get_example_wardrobe()))"
+Pair the vintage Levi's with your white ribbed tank top, the brown leather belt, and chunky white sneakers for an effortless, classic 90s off-duty model vibe. Alternatively, layer your oversized grey crewneck sweatshirt over the tank, cinch the jeans with the brown belt, and lace up the black combat boots for a cozy, grunge-streetwear look.
+```
 
-$ python -c "from tools import create_fit_card; ..."
+```text
+$ python -c "from tools import create_fit_card; from utils.data_loader import load_listings; print(create_fit_card('jeans and white sneakers', load_listings()[0]))"
+Found these vintage Levi's 501 jeans on depop for just $38.00 and they honestly fit like a dream. The medium wash has that perfectly broken-in streetwear look that usually takes years to achieve. Just styling them with my favorite white sneakers for an effortless weekend fit.
+```
 
 
 ---

@@ -243,5 +243,25 @@ def create_fit_card(outfit: str, new_item: dict) -> str:
     Test it from a terminal before you move on:
         python -c "from tools import create_fit_card; from utils.data_loader import load_listings; print(create_fit_card('jeans and white sneakers', load_listings()[0]))"
     """
-    # TODO: replace this with your implementation
-    return ""
+    if not outfit or not outfit.strip():
+        return (
+            f"Found a {new_item['title']} for ${new_item['price']:.2f} on "
+            f"{new_item['platform']}, no outfit ideas yet."
+        )
+
+    system = (
+        "You write short, casual captions for thrifted fashion finds, the "
+        "kind someone would actually post alongside a photo. Two to four "
+        "sentences. Mention what the item is, its price, and the platform "
+        "it's from, each exactly once. Be specific about the vibe, not generic."
+    )
+
+    prompt = (
+        f"Item: {new_item['title']}, ${new_item['price']:.2f}, "
+        f"from {new_item['platform']}. Condition: {new_item['condition']}. "
+        f"Style: {', '.join(new_item['style_tags'])}.\n\n"
+        f"Outfit idea: {outfit}\n\n"
+        f"Write the caption."
+    )
+
+    return generate(prompt, system=system)
