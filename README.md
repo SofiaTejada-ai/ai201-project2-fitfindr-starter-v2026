@@ -160,14 +160,52 @@ Found these vintage Levi's 501 jeans on depop for just $38.00 and they honestly 
 
 | Criterion | Target | Try 1 | Try 2 | Try 3 | Try 4 | Try 5 | Verdict |
 |---|---|---|---|---|---|---|---|
-| 1.  |  |  |  |  |  |  |  |
-| 2.  |  |  |  |  |  |  |  |
-| 3.  |  |  |  |  |  |  |  |
-| 4.  |  |  |  |  |  |  |  |
-| 5.  |  |  |  |  |  |  |  |
+| 1. Matching query completes all three tools | 4 of 5 | PASS | FAIL | PASS | PASS | PASS | MET (4/5) |
+| 2. Impossible query stops before tool 2 | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 3. Session selected_item id = id suggest_outfit receives | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 4. Fit card mentions the item and its price | 4 of 5 | PASS | FAIL | PASS | PASS | PASS | MET (4/5) |
+| 5. Absent item type handled like any empty search | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+
+Diagnostic (not one of my five): empty wardrobe, `denim jacket under $50` — completed 5/5 with general styling advice, no crash.
+
+Full output: [results/run_2026-10-11_2316_before.md](results/run_2026-10-11_2316_before.md)
 
 **Real output from one try**, pasted as text, naming the file and function
 that produced it:
+
+**Criterion 1, try 2 (FAIL)**: `agent.py::run_agent`, the error path after `generate.py::generate` raised `ModelUnavailable` inside `tools.py::create_fit_card`:
+
+```
+[5] model
+      →    unavailable: Couldn't reach the model: 500 INTERNAL. {'error': {'code': 500, 'message': 'Internal error encountered.', 'status': 'INTERNAL'}}
+stopped early: yes — Found a listing, but couldn't reach the AI model to style it, so there's no outfit or fit card this time. ...
+```
+
+**Criterion 2, try 1 (PASS)**: `agent.py::run_agent`, empty branch:
+
+```
+[1] parse_query
+      in:  designer ballgown size XXS under $5
+      out: dict with keys: description, size, max_price
+[2] search_listings (MCP)
+      in:  dict with keys: description, size, max_price
+      out: [] (empty)
+      →    branch: empty, stopping before suggest_outfit
+```
+
+**Criterion 3, try 1 (PASS)**: `agent.py::run_agent`. `session["selected_item"]` is `Denim Jacket — Light Wash, Cropped ($42.0, poshmark)`, and that same dict object is what's passed to `suggest_outfit(session["selected_item"], wardrobe)`.
+
+**Criterion 4, try 1 (PASS)**: `tools.py::create_fit_card`, item `Platform Mary Janes — Black Patent ($55.0)`:
+
+```
+Channeling serious 90s mall-goth energy with these chunky platform Mary Janes. Score these beauties for just $55.00 off Depop and complete your ultimate Y2K skater rotation. They add just the right amount of attitude to any baggy denim fit.
+```
+
+**Criterion 5, try 1 (PASS)**: `agent.py::run_agent`, query `a spaceship suit`:
+
+```
+No listings matched. Try a higher price limit, a different size, or more general keywords.
+```
 
 ---
 
@@ -215,9 +253,39 @@ that produced it:
      the same length, your branch isn't working — and this is the fastest way
      anyone will ever find that out. -->
 
-**Happy path**
+**Happy path**: `vintage graphic tee under $30` (from the before run, criterion 1 try 1). Step [2] is the MCP call.
 
-**Empty search**
+```
+[1] parse_query
+      in:  vintage graphic tee under $30
+      out: dict with keys: description, size, max_price
+[2] search_listings (MCP)
+      in:  dict with keys: description, size, max_price
+      out: 10 items: Y2K Baby Tee — Butterfly Print, Graphic Tee — 2003 Tour Bootleg Style, Vintage Band Tee — Faded Grey … +7 more
+      →    branch: 10 results, continuing
+[3] select_item
+      in:  10 results
+      out: Y2K Baby Tee — Butterfly Print ($18.0, depop)
+      →    took the first (best) match
+[4] suggest_outfit
+      in:  dict with keys: new_item, wardrobe_items
+      out: Pair the butterfly baby tee with your baggy straight-leg dark wash jeans and chunky white sneakers for an effo…
+[5] create_fit_card
+      in:  dict with keys: outfit, new_item
+      out: Channeling total early 2000s pop princess energy with this cute little butterfly baby tee. Scored it in pristi…
+```
+
+**Empty search**: `designer ballgown size XXS under $5`. It stops after step 2.
+
+```
+[1] parse_query
+      in:  designer ballgown size XXS under $5
+      out: dict with keys: description, size, max_price
+[2] search_listings (MCP)
+      in:  dict with keys: description, size, max_price
+      out: [] (empty)
+      →    branch: empty, stopping before suggest_outfit
+```
 
 **On the MCP move:** <!-- what changed in your code, and whether anything
 behaved differently afterwards. If the rewire didn't work, say exactly where it
@@ -243,11 +311,13 @@ full. -->
 
 | Criterion | Target | Try 1 | Try 2 | Try 3 | Try 4 | Try 5 | Verdict |
 |---|---|---|---|---|---|---|---|
-| 1.  |  |  |  |  |  |  |  |
-| 2.  |  |  |  |  |  |  |  |
-| 3.  |  |  |  |  |  |  |  |
-| 4.  |  |  |  |  |  |  |  |
-| 5.  |  |  |  |  |  |  |  |
+| 1. Matching query completes all three tools | 4 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 2. Impossible query stops before tool 2 | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 3. Session selected_item id = id suggest_outfit receives | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 4. Fit card mentions the item and its price | 4 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 5. Absent item type handled like any empty search | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+
+Full output: [results/run_2026-10-11_2319_after.md](results/run_2026-10-11_2319_after.md)
 
 **Did it help, and how do I know:**
 
