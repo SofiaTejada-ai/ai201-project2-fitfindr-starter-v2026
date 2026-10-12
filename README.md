@@ -140,6 +140,12 @@ Found these vintage Levi's 501 jeans on depop for just $38.00 and they honestly 
 - *What came back:* When I pasted the actual stub file, both were already typed to return a single `str`.
 - *What I changed:* I kept the stub's types instead of my original plan, since changing a given function signature wasn't worth it.
 
+**Moment 3 (unit 4)**
+
+- *What I asked for:* Help moving `search_listings` onto MCP, adding the trace and the error handler, and running both test runs.
+- *What came back:* Claude found that both failed tries in the before run had the same cause: `generate()` didn't retry `500 INTERNAL` errors. It offered two possible fixes, retrying 5xx errors or rewriting the fit card prompt.
+- *What I changed:* I picked the 5xx retry, because the fit cards were fine whenever they were generated, so the prompt wasn't the problem.
+
 <!-- ═══════════════════════ UNIT 4 — THE TEST ═══════════════════════
 
      Don't fill these in during unit 3.
@@ -229,13 +235,20 @@ No listings matched. Try a higher price limit, a different size, or more general
 
 | # | Criterion | Target | Verdict | How I decided |
 |---|---|---|---|---|
-| 1 |  |  |  |  |
-| 2 |  |  |  |  |
-| 3 |  |  |  |  |
-| 4 |  |  |  |  |
-| 5 |  |  |  |  |
+| 1 | Matching query completes all three tools | 4 of 5 | MET (4/5) | 4 tries returned a fit card. Try 2 stopped with no card. 4 passes against a target of 4. |
+| 2 | Impossible query stops before tool 2 | 5 of 5 | MET (5/5) | All 5 traces end at step 2 (`search_listings` returned `[]`), and `suggest_outfit` never appears. |
+| 3 | Session `selected_item` id = id `suggest_outfit` receives | 5 of 5 | MET (5/5) | In all 5 tries, `run_agent` passes the `session["selected_item"]` dict itself to `suggest_outfit`, so the ids can't differ. Every try logged the same item (Denim Jacket — Light Wash, Cropped). |
+| 4 | Fit card mentions the item and its price | 4 of 5 | MET (4/5) | I checked each card for "$55" and a word from the title. 4 cards had both. Try 2 had no card at all, so it counts as a FAIL. |
+| 5 | Absent item type handled like any empty search | 5 of 5 | MET (5/5) | All 5 tries of `a spaceship suit` gave `[]` and the same "No listings matched" message as criterion 2. |
 
 **Diagnoses**
+
+Nothing was MISSED, but criteria 1 and 4 each lost a try, and both failures had the same cause.
+
+- **Where:** the model's output, not my tools, branch, or session. Criterion 1 try 2 failed inside `create_fit_card`. Criterion 4 try 2 failed earlier, inside `suggest_outfit`.
+- **Mechanism:** Gemini returned `500 INTERNAL` (a temporary server error). `generate.py::generate` only retried 429 rate-limit errors. Every other error was raised as `ModelUnavailable` on the first attempt, so a one-off server hiccup was handled the same way as a bad API key. My handler in `run_agent` caught it and showed a message, so nothing crashed, but the user got no fit card.
+- **Pattern:** two failures in different tools with one cause. It's one problem: how model errors are retried. That's what I fixed.
+- **Were my targets too low?** Probably. I set 4 of 5 for criteria 1 and 4 to allow for the model wording things badly. But the failed tries weren't wording problems. They were the service failing, and 4 of 5 let that pass as a "MET". If I wrote these again, I'd make criterion 1 5 of 5, since one in five runs giving the user nothing isn't acceptable.
 
 
 
@@ -287,10 +300,13 @@ No listings matched. Try a higher price limit, a different size, or more general
       →    branch: empty, stopping before suggest_outfit
 ```
 
-**On the MCP move:** <!-- what changed in your code, and whether anything
-behaved differently afterwards. If the rewire didn't work, say exactly where it
-broke — the error text and the last thing that worked. That earns the point in
-full. -->
+**On the MCP move:** I moved `search_listings` behind MCP. `mcp_server.py` registers it with typed inputs (`description: str`, `size: str | None`, `max_price: float | None`) and a description that says the price is in US dollars and that no matches returns `[]`. In `agent.py::run_agent`, the direct call is now `call_tool("search_listings", {...})` from `mcp_client.py`. The results didn't change: `vintage graphic tee under $30` still returns the same 10 listings in the same order, and the empty case still comes back as `[]`, so the branch works without any changes. The one difference is speed. Each call starts the server process, so search is a bit slower than before.
+
+**Failure modes, triggered on purpose:**
+
+- **Empty search** (`spaceship suit under $10`): "No listings matched. Try a higher price limit, a different size, or more general keywords." This already worked before this unit.
+- **Empty wardrobe** (`denim jacket under $50 --empty-wardrobe`): returned general styling advice and a full fit card. No crash and no empty string. This also already worked.
+- **Model unavailable** (one character of `GEMINI_API_KEY` changed): before this unit it would have shown a raw error. I added a `ModelUnavailable` handler in `run_agent`, and now it says: "Found a listing, but couldn't reach the AI model to style it, so there's no outfit or fit card this time. Check that the API key in .env is correct and that you're online, then try again in a minute. Your top match was: Suede Chelsea Boots — Tan ($44.0)." The user still gets the search result and knows what to check.
 
 
 
@@ -303,9 +319,9 @@ full. -->
 
      `python run_eval.py --label after` -->
 
-**What I changed:**
+**What I changed:** In `generate.py::generate`, a 500/503 ("internal" or "unavailable") error now gets the same backoff-and-retry as a 429 rate limit, instead of being raised as `ModelUnavailable` right away. It's about 5 lines, and nothing else changed between the two runs.
 
-**Which failure it was meant to fix:**
+**Which failure it was meant to fix:** The only two failed tries in the before run (criterion 1 try 2 and criterion 4 try 2). Both were a single `500 INTERNAL` from Gemini that ended the run without a retry.
 
 ### Run Log — After
 
@@ -319,10 +335,7 @@ full. -->
 
 Full output: [results/run_2026-10-11_2319_after.md](results/run_2026-10-11_2319_after.md)
 
-**Did it help, and how do I know:**
-
-<!-- If it made things worse, say that. Honestly reported, that earns full
-     credit and is more interesting than one that worked. -->
+**Did it help, and how do I know:** Probably yes, but I can't fully prove it. The after run passed 25 of 25 tries, up from 23 of 25. Criteria 1 and 4 went from 4/5 to 5/5. During criterion 1 try 1, the console printed "service pushed back… attempt 1 of 5", which means the model threw an error, the new retry caught it, and the run finished. Without the fix, that error would probably have cost another try. The log doesn't show the error code, though, so I can't be sure it was a 500. Also, 500s are random, so the after run may just have had fewer of them. To really prove the fix works, I'd fake a 500 on purpose and confirm the run retries and finishes.
 
 
 
@@ -330,9 +343,12 @@ Full output: [results/run_2026-10-11_2319_after.md](results/run_2026-10-11_2319_
 
 ## What's Still Broken
 
-<!-- For each criterion still missed: what you'd do, and why you stopped where
-     you did. "I ran out of time" is fine if it's true. Pretending nothing is
-     left is not. -->
+No criterion is still MISSED, but these are real problems I found and didn't fix:
+
+- **Five model errors in a row still crash the run.** When retries run out, `generate()` raises a plain `RuntimeError` ("Still rate limited…"), not `ModelUnavailable`, so my handler doesn't catch it and the user sees an error instead of my message. The fix is to raise `ModelUnavailable` there. I stopped because the unit allows one improvement, and this would be a second change.
+- **Search matches the wrong words.** `black leather boots` returns "Platform Mary Janes — Black Patent" first, because the keyword match counts "black" the same as "boots". I'd give the item-type word (boots, tee, jacket) more weight. Criterion 4 still passed because it only checks that the card describes whatever item was picked, but a user wouldn't count that as finding boots.
+- **My criterion 3 evidence is weaker than it should be.** The trace shortens dict inputs to "dict with keys: …", so it never prints the item id `suggest_outfit` received. I verified it from the code path, where the same dict object is passed. Next time I'd log the id as a string in the trace so it shows up in the output.
+- **Targets:** criteria 1 and 4 at 4 of 5 were too easy (see Diagnoses). I'd raise criterion 1 to 5 of 5.
 
 
 
