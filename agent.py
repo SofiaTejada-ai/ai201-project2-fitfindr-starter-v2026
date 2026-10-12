@@ -17,7 +17,8 @@ import re
 
 import config
 import trace
-from tools import search_listings, suggest_outfit, create_fit_card
+from tools import suggest_outfit, create_fit_card
+from mcp_client import call_tool
 from generate import ModelUnavailable
 
 
@@ -152,29 +153,55 @@ def run_agent(query: str, wardrobe: dict) -> dict:
     trace.check_iterations(count)
     session["parsed"] = parse_query(query)
 
-    results = search_listings(
-        description=session["parsed"]["description"],
-        size=session["parsed"]["size"],
-        max_price=session["parsed"]["max_price"],
-    )
+    trace.step("parse_query", inputs=query, returned=session["parsed"])
+
+    # search_listings now goes through MCP (mcp_server.py), not a direct call.
+    results = call_tool("search_listings", {
+        "description": session["parsed"]["description"],
+        "size": session["parsed"]["size"],
+        "max_price": session["parsed"]["max_price"],
+    })
     session["search_results"] = results
 
     if not results:
+        trace.step("search_listings (MCP)", inputs=session["parsed"], returned=results,
+                   note="branch: empty, stopping before suggest_outfit")
         session["error"] = (
             "No listings matched. Try a higher price limit, a different "
             "size, or more general keywords."
         )
         return session
+    trace.step("search_listings (MCP)", inputs=session["parsed"], returned=results,
+               note=f"branch: {len(results)} results, continuing")
 
     session["selected_item"] = results[0]
+    trace.step("select_item", inputs=f"{len(results)} results", returned=session["selected_item"],
+               note="took the first (best) match")
 
-    count += 1
-    trace.check_iterations(count)
-    session["outfit_suggestion"] = suggest_outfit(session["selected_item"], wardrobe)
+    try:
+        count += 1
+        trace.check_iterations(count)
+        session["outfit_suggestion"] = suggest_outfit(session["selected_item"], wardrobe)
+        trace.step("suggest_outfit",
+                   inputs={"new_item": session["selected_item"].get("id"),
+                           "wardrobe_items": len(wardrobe.get("items", []))},
+                   returned=session["outfit_suggestion"])
 
-    count += 1
-    trace.check_iterations(count)
-    session["fit_card"] = create_fit_card(session["outfit_suggestion"], session["selected_item"])
+        count += 1
+        trace.check_iterations(count)
+        session["fit_card"] = create_fit_card(session["outfit_suggestion"], session["selected_item"])
+        trace.step("create_fit_card",
+                   inputs={"outfit": session["outfit_suggestion"], "new_item": session["selected_item"].get("id")},
+                   returned=session["fit_card"])
+    except ModelUnavailable as exc:
+        trace.step("model", note=f"unavailable: {exc}")
+        session["error"] = (
+            "Found a listing, but couldn't reach the AI model to style it, so "
+            "there's no outfit or fit card this time. Check that the API key in "
+            ".env is correct and that you're online, then try again in a minute. "
+            f"Your top match was: {session['selected_item'].get('title')} "
+            f"(${session['selected_item'].get('price')})."
+        )
 
     return session
 
