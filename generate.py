@@ -328,7 +328,13 @@ def generate(
                 or "resource" in message and "exhaust" in message
                 or "rate" in message and "limit" in message
             )
-            if not rate_limited:
+            # Unit 4 improvement: a 500/503 is the service hiccuping, not a bad
+            # key, so it gets the same retry as a rate limit instead of failing.
+            server_error = (
+                "500" in message or "503" in message
+                or "internal" in message or "unavailable" in message
+            )
+            if not (rate_limited or server_error):
                 raise ModelUnavailable(_explain(exc)) from exc
             backoff = _retry_delay(exc, attempt)
             print(
